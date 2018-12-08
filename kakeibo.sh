@@ -16,7 +16,7 @@
 # configuration
 #---------------------------------#
 WORKDIR=""
-
+LOGDIR="log"
 
 #---------------------------------#
 # main
@@ -24,7 +24,11 @@ WORKDIR=""
 cd ${WORKDIR}
 source bin/activate
 
-FILENAME=log/`date +"%Y%m%d%H%M%S"`.log
+if [ -e ${LOGDIR} ]; then
+    mkdir ${LOGDIR}
+fi
+
+FILENAME=${LOGDIR}/`date +"%Y%m%d%H%M%S"`.log
 if [ $( date -d '+1 day' +%d ) -eq 1 ]; then
     ./zaim.py --spreadsheet > $FILENAME 2>&1
 else
