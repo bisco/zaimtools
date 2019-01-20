@@ -1,13 +1,24 @@
 #!/usr/bin/env python3
+#fileencoding: utf-8
 
+#-----------------------------------------------#
+# python standard library
+#-----------------------------------------------#
 import calendar
 import csv
 from enum import Enum
 from datetime import datetime as dt
+
+#-----------------------------------------------#
+# pip
+#-----------------------------------------------#
 from oauth2client import tools
 
+#-----------------------------------------------#
+# my lib
+#-----------------------------------------------#
 import gspread
-from zaimapi import ZaimAPI
+from zaimapi import ZaimAPI, ZaimLocalDB
 
 class Payer(Enum):
     UNKNOWN = 0
@@ -232,10 +243,21 @@ def read_csv(filename):
             payments.append(Payment(date, category, genre, name, comment, place, price))
     return payments
 
-def read_api(filename, start_date, end_date):
-    payments = []
-    z = ZaimAPI(filename)
+def get_data_by_api(apikey_filename, start_date, end_date):
+    z = ZaimAPI(apikey_filename)
+    print("(1/1) Get data by Zaim REST API")
     entries = z.get_entries(start_date, end_date)
+    return entries
+
+def update_local_db(entries, this_month):
+    zldb = ZaimLocalDB("./zaim.db")
+    print("(1/2) delete entries in {}".format(this_month))
+    zldb.delete_entries_by_date(this_month)
+    print("(2/2) update entries in {}".format(this_month))
+    zldb.update_entries(entries)
+
+def gen_payments(entries):
+    payments = []
     for r in entries[::-1]:
         date = dt.strptime(r["date"], "%Y-%m-%d")
         category = r["category"]
@@ -309,7 +331,7 @@ def gen_reqvalues(pay_lists):
 
     return values
 
-
+#-----------------------------------------------#
 def main():
     n = dt.now()
     start_default = "{}-{:02d}-01".format(n.year, n.month)
@@ -328,23 +350,32 @@ def main():
         flags = None
 
     print("span: ", flags.start, flags.end)
+    if flags.spreadsheet == True:
+        num_of_steps = 4
+    else:
+        num_of_steps = 3
 
     if flags.csv != "":
         print("************* Start parsing CSV file *************")
         pay_lists = read_csv(flags.csv)
         print("*************  End parsing CSV file  *************")
     else:
-        print("*************  Start reading data with Zaim API *************")
-        pay_lists = read_api(flags.zaimapikey, flags.start, flags.end)
-        print("************* Finish reading data with Zaim API *************")
+        print("[1/{}] Get data from Zaim".format(num_of_steps))
+        entries = get_data_by_api(flags.zaimapikey, flags.start, flags.end)
+        print("[2/{}] Update local DB".format(num_of_steps))
+        this_month = flags.start[:7]
+        update_local_db(entries, this_month)
+        print("[3/{}] Calc payments".format(num_of_steps))
+        pay_lists = gen_payments(entries)
     values = gen_reqvalues(pay_lists)
     values.append([""])
     print("")
     if flags.spreadsheet:
-        print("############# Start sending data to Google Spreadsheet #############")
+        print("[4/{}] Send data to Google Spreadsheet".format(num_of_steps))
         print("sheet_name:", pay_lists[0].get_date_str())
         #print(values)
         g = gspread.Gspread(flags)
+        print("1/2 create a sheet whose name is {}".format(pay_lists[0].get_date_str()))
         result = g.create_new_sheet(pay_lists[0].get_date_str())
         print(result) # fixme: check result
         sheet_name = pay_lists[0].get_date_str()
@@ -353,10 +384,9 @@ def main():
         range_name = "{}!{}:{}".format(sheet_name, start_column, end_column)
         print("range_name:", range_name)
         value_input_option = "USER_ENTERED"
+        print("2/2 append data to the sheet")
         result = g.append_data(range_name, value_input_option, values)
         print(result) # fixme: check result
-        print("#############  End sending data to Google Spreadsheet  #############")
-
 
 if __name__ == "__main__":
     main()

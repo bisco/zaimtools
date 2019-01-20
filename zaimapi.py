@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
 #fileencoding: utf-8
 
+#----------------------------------------#
+# python standard library
+#----------------------------------------#
 import json
 import os
-import requests
 import sqlite3
+
+#----------------------------------------#
+# pip
+#----------------------------------------#
+import requests
 from requests_oauthlib import OAuth1
 
 class ZaimAPI:
     GET_MONEY_URL = u"https://api.zaim.net/v2/home/money"
     GET_CATEGORY_URL = u"https://api.zaim.net/v2/home/category"
     GET_GENRE_URL = u"https://api.zaim.net/v2/home/genre"
-    DB_PATH = os.path.abspath("./zaim.db")
 
     def __init__(self, filename="zaim_secret.json"):
         credential_dir = os.path.join(os.path.abspath(os.path.curdir), ".credentials")
@@ -30,8 +36,6 @@ class ZaimAPI:
                                      signature_type='auth_header')
         self.categories = self.__gen_idname_dict(ZaimAPI.GET_CATEGORY_URL, "categories")
         self.genres = self.__gen_idname_dict(ZaimAPI.GET_GENRE_URL, "genres")
-        self.db_conn = sqlite3.connect(ZaimAPI.DB_PATH)
-        self.db_cursor = self.db_conn.cursor()
 
     def __gen_idname_dict(self, url, key):
         params = { "mapping" : "1" }
@@ -41,10 +45,6 @@ class ZaimAPI:
         for i in _d:
             d[i["id"]] = i["name"]
         return d
-
-    def __connect_db(self):
-        self.db_conn = sqlite3.connect(ZaimAPI.DB_PATH)
-        self.db_cursor = conn.cursor()
 
     def get_category(self, cat_id):
         return self.categories[cat_id]
@@ -60,11 +60,11 @@ class ZaimAPI:
             "end_date" : end_date,
         }
         r = requests.get(self.GET_MONEY_URL, auth=self.__oauth_header, params=params)
-        self.entries = r.json()["money"]
-        for e in self.entries:
+        entries = r.json()["money"]
+        for e in entries:
             e["category"] = self.get_category(e["category_id"])
             e["genre"] = self.get_genre(e["genre_id"])
-        return self.entries
+        return entries
 
     def dump_json(self, start_date, end_date):
         if self.entries == False:
@@ -72,7 +72,29 @@ class ZaimAPI:
         with open("output_{}_{}.json".format(start_date, end_date), "w") as f:
             json.dump(self.entries, f)
 
-    def update_db(self):
+class ZaimLocalDB:
+    def __init__(self, db_path="./zaim.db"):
+        self.db_path = os.path.abspath(db_path)
+        self.db_conn = sqlite3.connect(self.db_path)
+        self.db_cursor = self.db_conn.cursor()
+
+    def db_commit(self):
+        self.db_conn.commit()
+
+    def db_close(self):
+        self.db_close()
+
+    def exec_query(self, q, k=None):
+        if k == None:
+            self.db_cursor.execute(q)
+        else:
+            self.db_cursor.execute(q, k)
+
+    def delete_entries_by_date(self, start_year_month):
+        delete_query = 'DELETE FROM zaim_kakeibo where date like "{}%"'.format(start_year_month)
+        self.exec_query(delete_query)
+
+    def update_entries(self, entries):
         insert_query = """
         REPLACE INTO zaim_kakeibo
             (
@@ -125,11 +147,9 @@ class ZaimAPI:
                 "from_account_id",
                 "to_account_id"
                ]
-        for entry in self.entries:
+        for entry in entries:
             key = [entry[k] for k in keys]
-            self.db_cursor.execute(insert_query, key)
-        self.db_conn.commit()
-        self.db_conn.close()
+            self.exec_query(insert_query, key)
 
 def main():
     import datetime, sys
