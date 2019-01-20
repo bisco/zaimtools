@@ -78,7 +78,7 @@ class Payment:
             return Payer.beta
         else:
             return Payer.UNKNOWN
-    
+
     def _paid_by_id(self):
         if "id" == self.comment.strip().split("\n")[0]:
             return True
@@ -267,9 +267,6 @@ def gen_payments(entries):
         price = int(r["amount"])
         comment = r["comment"]
         payments.append(Payment(date, category, genre, name, comment, place, price))
-    print("############# Start updating local DB #############")
-    z.update_db()
-    print("#############  End updating local DB  #############")
     return payments
 
 def gen_reqvalues(pay_lists):
@@ -375,7 +372,7 @@ def main():
         print("sheet_name:", pay_lists[0].get_date_str())
         #print(values)
         g = gspread.Gspread(flags)
-        print("1/2 create a sheet whose name is {}".format(pay_lists[0].get_date_str()))
+        print("(1/2) create a sheet whose name is {}".format(pay_lists[0].get_date_str()))
         result = g.create_new_sheet(pay_lists[0].get_date_str())
         print(result) # fixme: check result
         sheet_name = pay_lists[0].get_date_str()
@@ -384,7 +381,7 @@ def main():
         range_name = "{}!{}:{}".format(sheet_name, start_column, end_column)
         print("range_name:", range_name)
         value_input_option = "USER_ENTERED"
-        print("2/2 append data to the sheet")
+        print("(2/2) append data to the sheet")
         result = g.append_data(range_name, value_input_option, values)
         print(result) # fixme: check result
 
